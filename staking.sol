@@ -238,7 +238,7 @@ contract SpunkyStaking is Ownable, ReentrancyGuard {
     // Total staked amount
     uint256 private _totalStakedAmount = 0;
 
-    address public spunkyTokenAddress;
+    IERC20 public spunkyToken;
 
     // Staking details
     struct UserStake {
@@ -261,9 +261,11 @@ contract SpunkyStaking is Ownable, ReentrancyGuard {
     event ClaimRewards(address indexed user, uint256 reward);
     event Unstake(address indexed user, uint256 amount, StakingPlan plan);
 
-    constructor() {
+    constructor(address _spunkyTokenAddress) {
         name = "SpunkySDXStaking";
-          // Define the returns for each staking plan
+        spunkyToken = IERC20(_spunkyTokenAddress); // Initialize the spunkyToken state variable
+    
+        // Define the returns for each staking plan
         _stakingPlanReturns[StakingPlan.ThirtyDays] = 5;
         _stakingPlanReturns[StakingPlan.NinetyDays] = 10;
         _stakingPlanReturns[StakingPlan.OneEightyDays] = 30;
@@ -293,10 +295,10 @@ function stake(
 
     uint256 reward = calculateStakingReward(amount, plan);
 
-    require(IERC20(spunkyTokenAddress).balanceOf(address(this)) >= reward, "Staking rewards exhausted");
+    require(IERC20(spunkyToken).balanceOf(address(this)) >= reward, "Staking rewards exhausted");
 
     // Transfer tokens from the user to this contract
-    IERC20(spunkyTokenAddress).transferFrom(msg.sender, address(this), amount);
+    IERC20(spunkyToken).transferFrom(msg.sender, address(this), amount);
 
     _totalStakedAmount += amount;
 
@@ -336,7 +338,7 @@ function stake(
     );
 
     require(
-        IERC20(spunkyTokenAddress).balanceOf(address(this)) >= newAccruedReward,
+        IERC20(spunkyToken).balanceOf(address(this)) >= newAccruedReward,
         "Staking rewards exhausted"
     );
 
@@ -351,7 +353,7 @@ function stake(
     _totalStakedAmount += additionalAmount;
 
     // Transfer the additional staked amount from the user to the contract
-    IERC20(spunkyTokenAddress).transferFrom(msg.sender, address(this), additionalAmount);
+    IERC20(spunkyToken).transferFrom(msg.sender, address(this), additionalAmount);
 
     // Update staking details in the array
     uint256 detailsIndex = userStake.index;
@@ -382,7 +384,7 @@ function stake(
         );
 
         // Ensure there's enough in the reward pool
-        uint256 currentBalance = IERC20(spunkyTokenAddress).balanceOf(address(this));
+        uint256 currentBalance = IERC20(spunkyToken).balanceOf(address(this));
         if (currentBalance >= addedReward) {
             reward += addedReward;
         } else {
@@ -414,7 +416,7 @@ function stake(
 
     // Transfer the reward to the user
     require(
-        IERC20(spunkyTokenAddress).transfer(msg.sender, reward),
+        IERC20(spunkyToken).transfer(msg.sender, reward),
         "Transfer failed"
     );
 
@@ -479,7 +481,7 @@ function stake(
 
     // Transfer the unstaked amount and reward back to the user
     require(
-        IERC20(spunkyTokenAddress).transfer(msg.sender, totalAmount),
+        IERC20(spunkyToken).transfer(msg.sender, totalAmount),
         "Transfer failed"
     );
 
@@ -531,7 +533,7 @@ function stake(
         }
 
         // If the allocation balance is zero, return the accrued reward
-        if (IERC20(spunkyTokenAddress).balanceOf(address(this))  == 0) {
+        if (IERC20(spunkyToken).balanceOf(address(this))  == 0) {
             return userStake.accruedReward;
         }
 
