@@ -31,7 +31,7 @@ interface IERC20 {
      *
      * Returns a boolean value indicating whether the operation succeeded.
      *
-     * Emits a {Transfer} event.
+     * Emits a {Transfer} event.    
      */
     function transfer(address to, uint256 amount) external returns (bool);
 
@@ -322,7 +322,6 @@ function stake(
 }
 
 
-    
    function addToStake(
     uint256 additionalAmount,
     StakingPlan plan
