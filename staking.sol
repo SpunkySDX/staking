@@ -240,6 +240,8 @@ contract SpunkyStaking is Ownable, ReentrancyGuard {
 
     IERC20 public spunkyToken;
 
+    address private _stakingContract;
+
     // Staking details
     struct UserStake {
         uint256 index;
@@ -374,6 +376,13 @@ function stake(
 
     // Calculate the initial reward (plan reward + accrued reward)
     uint256 reward = userStake.reward + userStake.accruedReward;
+
+    // Check if the total balance (reward + stake amount) would exceed the maximum holding
+    uint256 totalSupply = spunkyToken.totalSupply();
+    uint256 MAX_HOLDING_PERCENTAGE = 5; // Define your maximum holding percentage here
+    uint256 totalBalance = reward + userStake.amount;
+    require(totalBalance <= ((totalSupply * MAX_HOLDING_PERCENTAGE) / 100), "Total balance would exceed maximum holding, use another address to stake");
+
 
     // Handle flexible plans differently
     if (plan == StakingPlan.Flexible) {
@@ -610,4 +619,6 @@ function stake(
         return
             (amount * rewardPercentage * elapseTime) / (1000 * secondsInAYear);
     }
+
+    
 }
