@@ -381,7 +381,7 @@ function stake(
     uint256 totalSupply = spunkyToken.totalSupply();
     uint256 MAX_HOLDING_PERCENTAGE = 5; // Define your maximum holding percentage here
     uint256 totalBalance = reward + userStake.amount;
-    require(totalBalance <= ((totalSupply * MAX_HOLDING_PERCENTAGE) / 100), "Total balance would exceed maximum holding, use another address to stake");
+    require(totalBalance <= ((totalSupply * MAX_HOLDING_PERCENTAGE) / 100), "Total balance would exceed maximum holding, use another address");
 
 
     // Handle flexible plans differently
@@ -584,41 +584,45 @@ function stake(
         return page;
     }
 
-        function calculateStakingReward(
-        uint256 amount,
-        StakingPlan plan
-    ) internal view returns (uint256) {
-        require(amount > 0, "Invalid staking amount");
-        uint256 rewardPercentage = _stakingPlanReturns[plan];
-        uint256 daysRequired = _stakingPlanDurations[plan];
+    function calculateStakingReward(
+    uint256 amount,
+    StakingPlan plan
+    )internal view returns (uint256) {
+    require(amount > 0, "Invalid staking amount");
+    uint256 rewardPercentage = _stakingPlanReturns[plan];
+    uint256 daysRequired = _stakingPlanDurations[plan];
 
-        if (plan == StakingPlan.Flexible) {
-            return 0;
-        } else {
-            return (amount * rewardPercentage * daysRequired) / (1000 * 365);
-        }
+    if (plan == StakingPlan.Flexible) {
+        return 0;
+    } else {
+        return (amount * rewardPercentage * daysRequired) / (1000 * 365);
+    }
     }
 
 
     function calculateAccruedReward(
-        uint256 amount,
-        StakingPlan plan
-    ) internal view returns (uint256) {
-        require(amount > 0, "Invalid staking amount");
-        uint256 startTime = _userStakes[msg.sender][plan].startTime;
-        uint256 rewardPercentage = _stakingPlanReturns[plan];
-        uint256 elapseTime = block.timestamp - startTime;
-        uint256 durationInSeconds = _stakingPlanDurations[plan] * 1 days;
-        uint256 secondsInAYear = 365 * 1 days;
+    uint256 amount,
+    StakingPlan plan
+) internal view returns (uint256) {
+    require(amount > 0, "Invalid staking amount");
+    uint256 startTime = _userStakes[msg.sender][plan].startTime;
+    uint256 rewardPercentage = _stakingPlanReturns[plan];
+    uint256 elapseTime = block.timestamp - startTime;
+    uint256 durationInSeconds = _stakingPlanDurations[plan] * 1 days;
+    uint256 secondsInAYear = 365 * 1 days;
 
-        if (elapseTime > durationInSeconds && plan != StakingPlan.Flexible) {
-            elapseTime = durationInSeconds;
-        }
-
-        // Total days accrued in relation to 365 days (1 year);
-        return
-            (amount * rewardPercentage * elapseTime) / (1000 * secondsInAYear);
+    if (elapseTime > durationInSeconds && plan != StakingPlan.Flexible) {
+        elapseTime = durationInSeconds;
     }
+
+    if (plan == StakingPlan.Flexible) {
+        // Adjusting the reward calculation for the Flexible plan to 0.1% APY
+        return (amount * elapseTime) / (1000 * secondsInAYear * 10);
+    } else {
+        // For other plans, the formula remains the same:
+        return (amount * rewardPercentage * elapseTime) / (1000 * secondsInAYear);
+    }
+}
 
     
 }
