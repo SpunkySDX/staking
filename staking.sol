@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+import "@openzeppelin/contracts/utils/Address.sol";
+
 interface IERC20 {
     /**
      * @dev Emitted when `value` tokens are moved from one account (`from`) to
@@ -237,10 +239,9 @@ contract SpunkyStaking is Ownable, ReentrancyGuard {
 
     // Total staked amount
     uint256 private _totalStakedAmount = 0;
+    uint256 private _rewardBalance;
 
     IERC20 public spunkyToken;
-
-    address private _stakingContract;
 
     // Staking details
     struct UserStake {
@@ -262,6 +263,7 @@ contract SpunkyStaking is Ownable, ReentrancyGuard {
     event UpdateStake(address indexed user, uint256 newAmount, StakingPlan plan);
     event ClaimRewards(address indexed user, uint256 reward);
     event Unstake(address indexed user, uint256 amount, StakingPlan plan);
+    event EmergencyWithdraw(address indexed user, uint256 amount, StakingPlan plan);
 
     constructor(address _spunkyTokenAddress) {
         name = "SpunkySDXStaking";
@@ -296,14 +298,19 @@ function stake(
     require(!userStake.isActive, "Plan is already active");
 
     uint256 reward = calculateStakingReward(amount, plan);
+    
+    require(_rewardBalance >= reward, "Staking rewards exhausted");
 
     require(IERC20(spunkyToken).balanceOf(address(this)) >= reward, "Staking rewards exhausted");
 
     // Transfer tokens from the user to this contract
-    IERC20(spunkyToken).transferFrom(msg.sender, address(this), amount);
+    uint256 balanceBefore = IERC20(spunkyToken).balanceOf(address(this));
+    IERC20(spunkyToken).safeTransferFrom(msg.sender, address(this), amount);
+    uint256 balanceAfter = IERC20(spunkyToken).balanceOf(address(this));
 
-    _totalStakedAmount += amount;
-
+   // Use the actual increase in balance for the accounting
+   uint256 actualAmount = balanceAfter - balanceBefore;
+   _totalStakedAmount += actualAmount;
     // If you want to decrement the staking allocation balance, you should do it in your logic
     // but you can't directly change the token balance like this.
     // You might want to manage a separate state variable for that.
@@ -324,7 +331,7 @@ function stake(
 }
 
 
-   function addToStake(
+      function addToStake(
     uint256 additionalAmount,
     StakingPlan plan
 ) external nonReentrant {
@@ -343,18 +350,17 @@ function stake(
         "Staking rewards exhausted"
     );
 
-    // If you want to decrement the staking allocation balance, you should do it in your logic
-    // but you can't directly change the token balance like this.
-    // You might want to manage a separate state variable for that.
-
     // Update the staking state
     userStake.accruedReward += newAccruedReward;
     userStake.amount += additionalAmount;
     userStake.startTime = block.timestamp;
     _totalStakedAmount += additionalAmount;
 
+    // Recalculate the reward based on the new total staked amount
+    userStake.reward = calculateStakingReward(userStake.amount, plan);
+
     // Transfer the additional staked amount from the user to the contract
-    IERC20(spunkyToken).transferFrom(msg.sender, address(this), additionalAmount);
+    IERC20(spunkyToken).SafeTransferFrom(msg.sender, address(this), additionalAmount);
 
     // Update staking details in the array
     uint256 detailsIndex = userStake.index;
@@ -366,8 +372,14 @@ function stake(
     emit UpdateStake(msg.sender, userStake.amount, plan);
 }
 
+    // Add a function to allow the owner to fund the reward balance
+    function fundRewards(uint256 amount) external onlyOwner {
+        IERC20(spunkyToken).transferFrom(msg.sender, address(this), amount);
+        _rewardBalance += amount;
+    }
 
-    function claimReward(StakingPlan plan) internal view returns (uint256) {
+
+   function claimReward(StakingPlan plan) internal returns (uint256) {
     // Load the user's stake details into memory
     UserStake memory userStake = _userStakes[msg.sender][plan];
 
@@ -376,6 +388,19 @@ function stake(
 
     // Calculate the initial reward (plan reward + accrued reward)
     uint256 reward = userStake.reward + userStake.accruedReward;
+
+
+    // Calculate total balance and max holding
+    uint256 totalBalance = userStake.amount + reward;
+    uint256 totalSupply = spunkyToken.totalSupply();
+    uint256 MAX_HOLDING_PERCENTAGE = 5; // Define your maximum holding percentage here
+    uint256 maxHolding = (totalSupply * MAX_HOLDING_PERCENTAGE) / 100;
+
+    // Cap the reward at the maximum holding limit minus the user's staked amount
+    if (totalBalance > maxHolding) {
+        reward = maxHolding - userStake.amount;
+    }
+
 
     // Check if the total balance (reward + stake amount) would exceed the maximum holding
     uint256 totalSupply = spunkyToken.totalSupply();
@@ -399,6 +424,8 @@ function stake(
             reward += currentBalance;
         }
     }
+        _rewardBalance -= reward;
+
 
     return reward;
 }
@@ -424,7 +451,7 @@ function stake(
 
     // Transfer the reward to the user
     require(
-        IERC20(spunkyToken).transfer(msg.sender, reward),
+        IERC20(spunkyToken).SafeTransfer(msg.sender, reward),
         "Transfer failed"
     );
 
@@ -484,12 +511,13 @@ function stake(
         // If the unstaking is done before the plan duration, the reward is forfeited
         reward = 0;
     }
+    _rewardBalance -= reward;
 
     uint256 totalAmount = userStake.amount + reward;
 
     // Transfer the unstaked amount and reward back to the user
     require(
-        IERC20(spunkyToken).transfer(msg.sender, totalAmount),
+        IERC20(spunkyToken).SafeTransfer(msg.sender, totalAmount),
         "Transfer failed"
     );
 
@@ -501,7 +529,8 @@ function stake(
 
     // Remove the user's stake details
     removeStakeFromArray(plan);
-}
+ }
+
     function getCanClaimStakingReward(
         StakingPlan plan
     ) external view returns (bool) {
@@ -540,9 +569,9 @@ function stake(
             return 0;
         }
 
-        // If the allocation balance is zero, return the accrued reward
+         // If the allocation balance is zero, return zero
         if (IERC20(spunkyToken).balanceOf(address(this))  == 0) {
-            return userStake.accruedReward;
+            return 0;
         }
 
         // Otherwise, calculate the total reward
@@ -563,26 +592,32 @@ function stake(
     }
 
     function getStakingDetailsPage(
-        uint256 start,
-        uint256 end
-    ) public view returns (UserStake[] memory) {
-        // Validate the indices
-        require(
-            start <= end && end < _stakingDetails.length,
-            "Invalid indices"
-        );
+    uint256 start,
+    uint256 end
+) public view returns (UserStake[] memory) {
+    // Validate the indices
+    require(
+        start <= end && end < _stakingDetails.length,
+        "Invalid indices"
+    );
 
-        // Create a new array to hold the range of UserStakes
-        UserStake[] memory page = new UserStake[](end - start + 1);
+    // Limit the number of iterations to 100
+    require(
+        end - start <= 100,
+        "Too many iterations"
+    );
 
-        // Loop through the _stakingDetails array and populate the 'page' array
-        for (uint256 i = start; i <= end; i++) {
-            page[i - start] = _stakingDetails[i];
-        }
+    // Create a new array to hold the range of UserStakes
+    UserStake[] memory page = new UserStake[](end - start + 1);
 
-        // Return the 'page' array
-        return page;
+    // Loop through the _stakingDetails array and populate the 'page' array
+    for (uint256 i = start; i <= end; i++) {
+        page[i - start] = _stakingDetails[i];
     }
+
+    // Return the 'page' array
+    return page;
+}
 
     function calculateStakingReward(
     uint256 amount,
@@ -617,11 +652,33 @@ function stake(
 
     if (plan == StakingPlan.Flexible) {
         // Adjusting the reward calculation for the Flexible plan to 0.1% APY
-        return (amount * elapseTime) / (1000 * secondsInAYear * 10);
+        return (amount * elapseTime) / (1000 * secondsInAYear);
     } else {
         // For other plans, the formula remains the same:
         return (amount * rewardPercentage * elapseTime) / (1000 * secondsInAYear);
     }
+}
+
+function emergencyWithdraw(StakingPlan plan) external nonReentrant {
+    require(msg.sender != owner(), "Owner cannot stake");
+    UserStake storage userStake = _userStakes[msg.sender][plan];
+    require(userStake.amount > 0, "No staking balance available");
+
+    uint256 totalAmount = userStake.amount;
+
+    // Transfer the unstaked amount back to the user
+    require(
+        IERC20(spunkyToken).SafeTransfer(msg.sender, totalAmount),
+        "Transfer failed"
+    );
+
+    // Update the total staked amount
+    _totalStakedAmount -= userStake.amount;
+    // Emit an EmergencyWithdraw event
+    emit EmergencyWithdraw(msg.sender, totalAmount, plan);
+
+    // Remove the user's stake details
+    delete _userStakes[msg.sender][plan];
 }
 
     
