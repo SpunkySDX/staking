@@ -331,46 +331,42 @@ function stake(
 }
 
 
-      function addToStake(
-    uint256 additionalAmount,
-    StakingPlan plan
-) external nonReentrant {
+function addToStake(uint256 additionalAmount, StakingPlan plan) external nonReentrant {
     require(additionalAmount > 0, "Invalid additional staking amount");
     UserStake storage userStake = _userStakes[msg.sender][plan];
     require(userStake.amount > 0, "No existing stake found");
 
     // Calculate the new accrued reward
-    uint256 newAccruedReward = calculateAccruedReward(
-        userStake.amount,
-        plan
-    );
+    uint256 newAccruedReward = calculateAccruedReward(userStake.amount, plan);
 
-    require(
-        IERC20(spunkyToken).balanceOf(address(this)) >= newAccruedReward,
-        "Staking rewards exhausted"
-    );
+    require(IERC20(spunkyToken).balanceOf(address(this)) >= newAccruedReward, "Staking rewards exhausted");
+
+    // Transfer the additional staked amount from the user to the contract
+    uint256 balanceBefore = IERC20(spunkyToken).balanceOf(address(this));
+    IERC20(spunkyToken).safeTransferFrom(msg.sender, address(this), additionalAmount);
+    uint256 balanceAfter = IERC20(spunkyToken).balanceOf(address(this));
+
+    // Use the actual increase in balance for the accounting
+    uint256 actualAdditionalAmount = balanceAfter - balanceBefore;
 
     // Update the staking state
     userStake.accruedReward += newAccruedReward;
-    userStake.amount += additionalAmount;
+    userStake.amount += actualAdditionalAmount;
     userStake.startTime = block.timestamp;
-    _totalStakedAmount += additionalAmount;
+    _totalStakedAmount += actualAdditionalAmount;
 
     // Recalculate the reward based on the new total staked amount
     userStake.reward = calculateStakingReward(userStake.amount, plan);
 
-    // Transfer the additional staked amount from the user to the contract
-    IERC20(spunkyToken).SafeTransferFrom(msg.sender, address(this), additionalAmount);
-
     // Update staking details in the array
     uint256 detailsIndex = userStake.index;
     _stakingDetails[detailsIndex].accruedReward = newAccruedReward;
-    _stakingDetails[detailsIndex].amount += additionalAmount;
+    _stakingDetails[detailsIndex].amount += actualAdditionalAmount;
     _stakingDetails[detailsIndex].startTime = block.timestamp;
 
     // Emit update
     emit UpdateStake(msg.sender, userStake.amount, plan);
-}
+}  
 
     // Add a function to allow the owner to fund the reward balance
     function fundRewards(uint256 amount) external onlyOwner {
