@@ -360,7 +360,7 @@ function addToStake(uint256 additionalAmount, StakingPlan plan) external nonReen
 
     // Update staking details in the array
     uint256 detailsIndex = userStake.index;
-    _stakingDetails[detailsIndex].accruedReward = newAccruedReward;
+    _stakingDetails[detailsIndex].accruedReward += newAccruedReward;
     _stakingDetails[detailsIndex].amount += actualAdditionalAmount;
     _stakingDetails[detailsIndex].startTime = block.timestamp;
 
@@ -498,6 +498,14 @@ function addToStake(uint256 additionalAmount, StakingPlan plan) external nonReen
     UserStake storage userStake = _userStakes[msg.sender][plan];
     require(userStake.amount > 0, "No staking balance available");
 
+    // Check if the staking period has ended
+    if (plan == StakingPlan.Flexible) {
+        // For the flexible plan, require at least 48 hours before unstaking
+        require(block.timestamp >= userStake.startTime + 2 days, "Minimum staking period for flexible plan has not ended");
+    } else {
+        require(block.timestamp >= userStake.startTime + _stakingPlanDurations[plan] * 1 days, "Staking period has not ended");
+    }
+
     bool isAfterPlanDuration = block.timestamp >=
         userStake.startTime + _stakingPlanDurations[plan] * 1 days;
 
@@ -525,7 +533,7 @@ function addToStake(uint256 additionalAmount, StakingPlan plan) external nonReen
 
     // Remove the user's stake details
     removeStakeFromArray(plan);
- }
+}
 
     function getCanClaimStakingReward(
         StakingPlan plan
