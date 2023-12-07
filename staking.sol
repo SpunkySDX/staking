@@ -515,7 +515,6 @@ function addToStake(uint256 additionalAmount, StakingPlan plan) external nonReen
         // If the unstaking is done before the plan duration, the reward is forfeited
         reward = 0;
     }
-    _rewardBalance -= reward;
 
     uint256 totalAmount = userStake.amount + reward;
 
