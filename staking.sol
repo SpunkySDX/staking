@@ -369,7 +369,7 @@ function addToStake(uint256 additionalAmount, StakingPlan plan) external nonReen
 }  
 
     // Add a function to allow the owner to fund the reward balance
-    function fundRewards(uint256 amount) external onlyOwner {
+    function fundRewards(uint256 amount) external onlyOwner nonReentrant{
         IERC20(spunkyToken).transferFrom(msg.sender, address(this), amount);
         _rewardBalance += amount;
     }
@@ -387,9 +387,9 @@ function addToStake(uint256 additionalAmount, StakingPlan plan) external nonReen
 
 
     // Calculate total balance and max holding
-    uint256 totalBalance = userStake.amount + reward;
     uint256 totalSupply = spunkyToken.totalSupply();
     uint256 MAX_HOLDING_PERCENTAGE = 5; // Define your maximum holding percentage here
+    uint256 totalBalance = userStake.amount + reward;
     uint256 maxHolding = (totalSupply * MAX_HOLDING_PERCENTAGE) / 100;
 
     // Cap the reward at the maximum holding limit minus the user's staked amount
