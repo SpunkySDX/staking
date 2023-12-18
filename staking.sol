@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+
+
 library Address {
     /**
      * @dev The ETH balance of the account is not enough to perform the operation.
@@ -152,6 +154,7 @@ library Address {
         }
     }
 }
+
 library SafeERC20 {
     using Address for address;
 
@@ -668,6 +671,7 @@ function addToStake(uint256 additionalAmount, StakingPlan plan) external nonReen
             reward += currentBalance;
         }
     }
+    require(_rewardBalance >= reward, "Insufficient reward balance");
         _rewardBalance -= reward;
 
 
@@ -694,10 +698,7 @@ function addToStake(uint256 additionalAmount, StakingPlan plan) external nonReen
     uint256 reward = claimReward(plan);
 
     // Transfer the reward to the user
-   require(
-        IERC20(spunkyToken).safeTransfer(msg.sender, reward),
-        "Transfer failed"
-    );
+    IERC20(spunkyToken).safeTransfer(msg.sender, reward);
 
     // Reset the accrued reward and startTime for the user
     userStake.accruedReward = 0;
@@ -767,10 +768,7 @@ function addToStake(uint256 additionalAmount, StakingPlan plan) external nonReen
     uint256 totalAmount = userStake.amount + reward;
 
     // Transfer the unstaked amount and reward back to the user
-    require(
-        IERC20(spunkyToken).SafeTransfer(msg.sender, totalAmount),
-        "Transfer failed"
-    );
+        IERC20(spunkyToken).safeTransfer(msg.sender, totalAmount);
 
     // Update the total staked amount
     _totalStakedAmount -= userStake.amount;
@@ -918,10 +916,7 @@ function emergencyWithdraw(StakingPlan plan) external nonReentrant {
     uint256 totalAmount = userStake.amount;
 
     // Transfer the unstaked amount back to the user
-    require(
-        IERC20(spunkyToken).SafeTransfer(msg.sender, totalAmount),
-        "Transfer failed"
-    );
+        IERC20(spunkyToken).safeTransfer(msg.sender, totalAmount);
 
     // Update the total staked amount
     _totalStakedAmount -= userStake.amount;
