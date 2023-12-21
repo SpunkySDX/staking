@@ -640,6 +640,8 @@ function addToStake(uint256 additionalAmount, StakingPlan plan) external nonReen
 
     // Calculate the initial reward (plan reward + accrued reward)
     uint256 reward = userStake.reward + userStake.accruedReward;
+     // Check if sufficient reward balance is available
+    require(_rewardBalance >= reward, "Insufficient reward balance");
 
 
     // Calculate total balance and max holding
@@ -652,7 +654,8 @@ function addToStake(uint256 additionalAmount, StakingPlan plan) external nonReen
     if (totalBalance > maxHolding) {
         reward = maxHolding - userStake.amount;
     }
-
+    // Subtract the reward from the reward balance
+    _rewardBalance -= reward;
     require(totalBalance <= ((totalSupply * MAX_HOLDING_PERCENTAGE) / 100), "Total balance would exceed maximum holding, use another address");
 
 
