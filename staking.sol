@@ -654,8 +654,7 @@ function addToStake(uint256 additionalAmount, StakingPlan plan) external nonReen
     if (totalBalance > maxHolding) {
         reward = maxHolding - userStake.amount;
     }
-    // Subtract the reward from the reward balance
-    _rewardBalance -= reward;
+  
     require(totalBalance <= ((totalSupply * MAX_HOLDING_PERCENTAGE) / 100), "Total balance would exceed maximum holding, use another address");
 
 
