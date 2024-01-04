@@ -497,6 +497,9 @@ contract SpunkyStaking is Ownable, ReentrancyGuard {
     uint256 private _totalStakedAmount = 0;
     uint256 private _rewardBalance;
 
+    // Calculate 5% of the total supply
+    uint256 private constant MAX_HOLDING = (500 * (10 ** 9) * (10 ** 18) * 5) / 100;
+
     IERC20 public spunkyToken;
 
     // Staking details
@@ -590,7 +593,9 @@ function stake(
 function addToStake(uint256 additionalAmount, StakingPlan plan) external nonReentrant {
     require(additionalAmount > 0, "Invalid additional staking amount");
     UserStake storage userStake = _userStakes[msg.sender][plan];
-    require(userStake.amount > 0, "No existing stake found");
+
+    uint256 newStakeAmount = userStake.amount + additionalAmount;
+    require(newStakeAmount <= MAX_HOLDING, "New stake amount exceeds maximum holding limit");
 
     // Calculate the new accrued reward
     uint256 newAccruedReward = calculateAccruedReward(userStake.amount, plan);
