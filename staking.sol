@@ -543,40 +543,30 @@ contract SpunkyStaking is Ownable, ReentrancyGuard {
         _stakingPlanDurations[StakingPlan.Flexible] = 2;
     }
 
-// Your staking functions here
-function stake(
-    uint256 amount,
-    StakingPlan plan
-) external nonReentrant {
+function stake(uint256 amount, StakingPlan plan) external nonReentrant {
     require(amount > 0, "The staking amount must be greater than zero.");
     UserStake storage userStake = _userStakes[msg.sender][plan];
-    require(
-        userStake.amount == 0,
-        "User already staking; add to your stake or unstake."
-    );
+    require(userStake.amount == 0, "User already staking; add to your stake or unstake.");
     require(!userStake.isActive, "Plan is already active");
 
-    uint256 reward = calculateStakingReward(amount, plan);
-    
-    require(_rewardBalance >= reward, "Staking rewards exhausted");
-
-    require(IERC20(spunkyToken).balanceOf(address(this)) >= reward, "Staking rewards exhausted");
-
-    // Transfer tokens from the user to this contract
+    // Transfer tokens from the user to this contract and calculate the actual amount received
     uint256 balanceBefore = IERC20(spunkyToken).balanceOf(address(this));
     IERC20(spunkyToken).safeTransferFrom(msg.sender, address(this), amount);
     uint256 balanceAfter = IERC20(spunkyToken).balanceOf(address(this));
+    uint256 actualAmount = balanceAfter - balanceBefore;
 
-   // Use the actual increase in balance for the accounting
-   uint256 actualAmount = balanceAfter - balanceBefore;
-   _totalStakedAmount += actualAmount;
-    // If you want to decrement the staking allocation balance, you should do it in your logic
-    // but you can't directly change the token balance like this.
-    // You might want to manage a separate state variable for that.
+    // Update total staked amount
+    _totalStakedAmount += actualAmount;
 
-    // Update stake and push into an array
+    // Calculate reward based on actualAmount
+    uint256 reward = calculateStakingReward(actualAmount, plan);
+    
+    require(_rewardBalance >= reward, "Staking rewards exhausted");
+    require(IERC20(spunkyToken).balanceOf(address(this)) >= reward, "Staking rewards exhausted");
+
+    // Update stake details
     userStake.owner = msg.sender;
-    userStake.amount = amount;
+    userStake.amount = actualAmount; // Use actualAmount here
     userStake.startTime = block.timestamp;
     userStake.plan = plan;
     userStake.reward = reward;
@@ -586,48 +576,41 @@ function stake(
 
     _stakingDetails.push(userStake);
 
-    emit Stake(msg.sender, amount, plan);
+    emit Stake(msg.sender, actualAmount, plan); // Emit actualAmount
 }
 
 
-function addToStake(uint256 additionalAmount, StakingPlan plan) external nonReentrant {
+  function addToStake(uint256 additionalAmount, StakingPlan plan) external nonReentrant {
     require(additionalAmount > 0, "Invalid additional staking amount");
     UserStake storage userStake = _userStakes[msg.sender][plan];
 
-    uint256 newStakeAmount = userStake.amount + additionalAmount;
-    require(newStakeAmount <= MAX_HOLDING, "New stake amount exceeds maximum holding limit");
-
-    // Calculate the new accrued reward
-    uint256 newAccruedReward = calculateAccruedReward(userStake.amount, plan);
-
-    require(IERC20(spunkyToken).balanceOf(address(this)) >= newAccruedReward, "Staking rewards exhausted");
-
-    // Transfer the additional staked amount from the user to the contract
+    // Transfer the additional amount to the contract and calculate the actual additional amount received
     uint256 balanceBefore = IERC20(spunkyToken).balanceOf(address(this));
     IERC20(spunkyToken).safeTransferFrom(msg.sender, address(this), additionalAmount);
     uint256 balanceAfter = IERC20(spunkyToken).balanceOf(address(this));
-
-    // Use the actual increase in balance for the accounting
     uint256 actualAdditionalAmount = balanceAfter - balanceBefore;
 
+   uint256 newStakeAmount = userStake.amount + actualAdditionalAmount;
+    require(newStakeAmount <= MAX_HOLDING, "New stake amount exceeds maximum holding limit");
+
     // Update the staking state
-    userStake.accruedReward += newAccruedReward;
-    userStake.amount += actualAdditionalAmount;
+    userStake.accruedReward = calculateAccruedReward(userStake.amount, plan);
+    userStake.amount = newStakeAmount; // Use newStakeAmount here
     userStake.startTime = block.timestamp;
     _totalStakedAmount += actualAdditionalAmount;
 
     // Recalculate the reward based on the new total staked amount
-    userStake.reward = calculateStakingReward(userStake.amount, plan);
+    userStake.reward = calculateStakingReward(newStakeAmount, plan);
 
     // Update staking details in the array
     uint256 detailsIndex = userStake.index;
-    _stakingDetails[detailsIndex].accruedReward += newAccruedReward;
-    _stakingDetails[detailsIndex].amount += actualAdditionalAmount;
+    _stakingDetails[detailsIndex].accruedReward = userStake.accruedReward;
+    _stakingDetails[detailsIndex].amount = newStakeAmount;
     _stakingDetails[detailsIndex].startTime = block.timestamp;
 
     // Emit update
-    emit UpdateStake(msg.sender, userStake.amount, plan);
-}  
+    emit UpdateStake(msg.sender, newStakeAmount, plan); // Emit newStakeAmount
+}
 
     // Add a function to allow the owner to fund the reward balance
     function fundRewards(uint256 amount) external onlyOwner nonReentrant{
@@ -649,18 +632,18 @@ function addToStake(uint256 additionalAmount, StakingPlan plan) external nonReen
     require(_rewardBalance >= reward, "Insufficient reward balance");
 
 
-    // Calculate total balance and max holding
+    // Calculate total balance and max holding based on current totalSupply
     uint256 totalSupply = spunkyToken.totalSupply();
-    uint256 MAX_HOLDING_PERCENTAGE = 5; // Define your maximum holding percentage here
+    uint256 MAX_HOLDING_PERCENTAGE = 5;
     uint256 totalBalance = userStake.amount + reward;
     uint256 maxHolding = (totalSupply * MAX_HOLDING_PERCENTAGE) / 100;
 
-    // Cap the reward at the maximum holding limit minus the user's staked amount
+    // Cap the reward if totalBalance exceeds maxHolding
     if (totalBalance > maxHolding) {
         reward = maxHolding - userStake.amount;
     }
-  
-    require(totalBalance <= ((totalSupply * MAX_HOLDING_PERCENTAGE) / 100), "Total balance would exceed maximum holding, use another address");
+
+    require(totalBalance <= maxHolding, "Total balance would exceed maximum holding, use another address");
 
 
     // Handle flexible plans differently
