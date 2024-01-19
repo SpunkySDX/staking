@@ -633,10 +633,9 @@ function stake(uint256 amount, StakingPlan plan) external nonReentrant {
 
 
     // Calculate total balance and max holding based on current totalSupply
-    uint256 totalSupply = spunkyToken.totalSupply();
-    uint256 MAX_HOLDING_PERCENTAGE = 5;
+   
     uint256 totalBalance = userStake.amount + reward;
-    uint256 maxHolding = (totalSupply * MAX_HOLDING_PERCENTAGE) / 100;
+    uint256 maxHolding = (500 * (10 ** 9) * (10 ** 18) * 5) / 100;
 
     // Cap the reward if totalBalance exceeds maxHolding
     if (totalBalance > maxHolding) {
