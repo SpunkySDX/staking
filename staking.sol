@@ -619,53 +619,32 @@ function stake(uint256 amount, StakingPlan plan) external nonReentrant {
     }
 
 
-   function claimReward(StakingPlan plan) internal returns (uint256) {
-    // Load the user's stake details into memory
+  function claimReward(StakingPlan plan) internal returns (uint256) {
     UserStake memory userStake = _userStakes[msg.sender][plan];
-
-    // Ensure the user has a valid stake
     require(userStake.amount > 0, "No staking balance available");
 
-    // Calculate the initial reward (plan reward + accrued reward)
     uint256 reward = userStake.reward + userStake.accruedReward;
-     // Check if sufficient reward balance is available
-    require(_rewardBalance >= reward, "Insufficient reward balance");
 
-
-    // Calculate total balance and max holding based on current totalSupply
-   
-    uint256 totalBalance = userStake.amount + reward;
-    uint256 maxHolding = (500 * (10 ** 9) * (10 ** 18) * 5) / 100;
-
-    // Cap the reward if totalBalance exceeds maxHolding
-    if (totalBalance > maxHolding) {
-        reward = maxHolding - userStake.amount;
-    }
-
-    require(totalBalance <= maxHolding, "Total balance would exceed maximum holding, use another address");
-
-
-    // Handle flexible plans differently
     if (plan == StakingPlan.Flexible) {
-        uint256 addedReward = calculateAccruedReward(
-            userStake.amount,
-            plan
-        );
-
-        // Ensure there's enough in the reward pool
-        uint256 currentBalance = IERC20(spunkyToken).balanceOf(address(this));
-        if (currentBalance >= addedReward) {
+        uint256 addedReward = calculateAccruedReward(userStake.amount, plan);
+        if (_rewardBalance >= addedReward) {
             reward += addedReward;
         } else {
-            reward += currentBalance;
+            reward += _rewardBalance;
         }
     }
-    require(_rewardBalance >= reward, "Insufficient reward balance");
-        _rewardBalance -= reward;
 
+    uint256 totalBalance = userStake.amount + reward;
+    if (totalBalance > MAX_HOLDING) {
+        reward = MAX_HOLDING - userStake.amount;
+    }
+
+    require(_rewardBalance >= reward, "Insufficient reward balance");
+    _rewardBalance -= reward;
 
     return reward;
-}
+  }
+
 
 
 
