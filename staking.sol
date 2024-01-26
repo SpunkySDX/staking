@@ -881,19 +881,25 @@ function emergencyWithdraw(StakingPlan plan) external nonReentrant {
     UserStake storage userStake = _userStakes[msg.sender][plan];
     require(userStake.amount > 0, "No staking balance available");
 
+    // Ensure that emergency withdrawal is done before the plan ends
+    bool isBeforePlanEnds = block.timestamp < userStake.startTime + _stakingPlanDurations[plan] * 1 days;
+    require(isBeforePlanEnds, "Emergency withdrawal is allowed only before the plan ends");
+
     uint256 totalAmount = userStake.amount;
 
     // Transfer the unstaked amount back to the user
-        IERC20(spunkyToken).safeTransfer(msg.sender, totalAmount);
+    IERC20(spunkyToken).safeTransfer(msg.sender, totalAmount);
 
     // Update the total staked amount
     _totalStakedAmount -= userStake.amount;
+    
     // Emit an EmergencyWithdraw event
     emit EmergencyWithdraw(msg.sender, totalAmount, plan);
 
     // Remove the user's stake details
     delete _userStakes[msg.sender][plan];
 }
+
 
     
 }
