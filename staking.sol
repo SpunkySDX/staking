@@ -618,8 +618,7 @@ function stake(uint256 amount, StakingPlan plan) external nonReentrant {
         _rewardBalance += amount;
     }
 
-
-  function claimReward(StakingPlan plan) internal returns (uint256) {
+function claimReward(StakingPlan plan) internal returns (uint256) {
     UserStake memory userStake = _userStakes[msg.sender][plan];
     require(userStake.amount > 0, "No staking balance available");
 
@@ -627,10 +626,11 @@ function stake(uint256 amount, StakingPlan plan) external nonReentrant {
 
     if (plan == StakingPlan.Flexible) {
         uint256 addedReward = calculateAccruedReward(userStake.amount, plan);
-        if (_rewardBalance >= addedReward) {
-            reward += addedReward;
-        } else {
-            reward += _rewardBalance;
+        reward += addedReward;
+
+        // Adjust reward if it exceeds the available _rewardBalance
+        if (_rewardBalance < reward){
+            reward = _rewardBalance;
         }
     }
 
@@ -643,9 +643,7 @@ function stake(uint256 amount, StakingPlan plan) external nonReentrant {
     _rewardBalance -= reward;
 
     return reward;
-  }
-
-
+}
 
 
   function userClaimReward(StakingPlan plan) external nonReentrant {
