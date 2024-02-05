@@ -499,6 +499,8 @@ contract SpunkyStaking is Ownable, ReentrancyGuard {
 
     // Calculate 5% of the total supply
     uint256 private constant MAX_HOLDING = (500 * (10 ** 9) * (10 ** 18) * 5) / 100;
+    
+    uint256 private _totalPromisedRewards;
 
     IERC20 public spunkyToken;
 
@@ -559,10 +561,12 @@ function stake(uint256 amount, StakingPlan plan) external nonReentrant {
     _totalStakedAmount += actualAmount;
 
     // Calculate reward based on actualAmount
-    uint256 reward = calculateStakingReward(actualAmount, plan);
     
-    require(_rewardBalance >= reward, "Staking rewards exhausted");
-    require(IERC20(spunkyToken).balanceOf(address(this)) >= reward, "Staking rewards exhausted");
+    uint256 reward = calculateStakingReward(actualAmount, plan);
+    uint256 totalPromisedRewards = _totalPromisedRewards + reward;
+    
+    require(_rewardBalance >= totalPromisedRewards, "Insufficient reward balance for all stakers");
+    _totalPromisedRewards = totalPromisedRewards;
 
     // Update stake details
     userStake.owner = msg.sender;
@@ -595,15 +599,20 @@ function stake(uint256 amount, StakingPlan plan) external nonReentrant {
 
     // Update the staking state
     userStake.accruedReward = calculateAccruedReward(userStake.amount, plan);
+    
     userStake.amount = newStakeAmount; // Use newStakeAmount here
     userStake.startTime = block.timestamp;
     _totalStakedAmount += actualAdditionalAmount;
 
     // Recalculate the reward based on the new total staked amount
-    userStake.reward = calculateStakingReward(newStakeAmount, plan);
+    uint256 additionalReward = calculateStakingReward(actualAdditionalAmount, plan);
+    uint256 totalPromisedRewards = _totalPromisedRewards + additionalReward;
 
+    require(_rewardBalance >= totalPromisedRewards, "Insufficient reward balance for all stakers");
+    _totalPromisedRewards = totalPromisedRewards;
     // Update staking details in the array
     uint256 detailsIndex = userStake.index;
+    _stakingDetails[detailsIndex].reward = userStake.reward;
     _stakingDetails[detailsIndex].accruedReward = userStake.accruedReward;
     _stakingDetails[detailsIndex].amount = newStakeAmount;
     _stakingDetails[detailsIndex].startTime = block.timestamp;
@@ -618,7 +627,7 @@ function stake(uint256 amount, StakingPlan plan) external nonReentrant {
         _rewardBalance += amount;
     }
 
-function claimReward(StakingPlan plan) internal returns (uint256) {
+ function claimReward(StakingPlan plan) internal returns (uint256) {
     UserStake memory userStake = _userStakes[msg.sender][plan];
     require(userStake.amount > 0, "No staking balance available");
 
@@ -643,7 +652,7 @@ function claimReward(StakingPlan plan) internal returns (uint256) {
     _rewardBalance -= reward;
 
     return reward;
-}
+  }
 
 
   function userClaimReward(StakingPlan plan) external nonReentrant {
