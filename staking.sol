@@ -493,6 +493,10 @@ contract SpunkyStaking is Ownable, ReentrancyGuard {
     // Define the duration for each plan
     mapping(StakingPlan => uint256) private _stakingPlanDurations;
 
+    // Separate reward balances for flexible and fixed plans
+    uint256 private _rewardBalanceForFlexiblePlan;
+    uint256 private _rewardBalanceForFixedPlan;
+
     // Total staked amount
     uint256 private _totalStakedAmount = 0;
     uint256 private _rewardBalance;
@@ -543,44 +547,66 @@ contract SpunkyStaking is Ownable, ReentrancyGuard {
         _stakingPlanDurations[StakingPlan.OneEightyDays] = 180;
         _stakingPlanDurations[StakingPlan.ThreeSixtyDays] = 360;
         _stakingPlanDurations[StakingPlan.Flexible] = 2;
-    }
 
-function stake(uint256 amount, StakingPlan plan) external nonReentrant {
+         _rewardBalanceForFlexiblePlan = 0;
+        _rewardBalanceForFixedPlan = 0;
+    }
+   function stake(uint256 amount, StakingPlan plan) external nonReentrant {
     require(amount > 0, "The staking amount must be greater than zero.");
     UserStake storage userStake = _userStakes[msg.sender][plan];
-    require(userStake.amount == 0, "User already staking; add to your stake or unstake.");
-    require(!userStake.isActive, "Plan is already active");
 
-    // Transfer tokens from the user to this contract and calculate the actual amount received
-    uint256 balanceBefore = IERC20(spunkyToken).balanceOf(address(this));
-    IERC20(spunkyToken).safeTransferFrom(msg.sender, address(this), amount);
-    uint256 balanceAfter = IERC20(spunkyToken).balanceOf(address(this));
+    // Check for existing stake in the case of fixed plans
+    if (plan != StakingPlan.Flexible) {
+        require(userStake.amount == 0, "Already staking under a fixed plan. Unstake or choose the flexible plan.");
+        require(!userStake.isActive, "Fixed plan is already active");
+    }
+
+    // Transfer tokens from the user to this contract
+    uint256 balanceBefore = spunkyToken.balanceOf(address(this));
+    spunkyToken.safeTransferFrom(msg.sender, address(this), amount);
+    uint256 balanceAfter = spunkyToken.balanceOf(address(this));
     uint256 actualAmount = balanceAfter - balanceBefore;
+
+    // Check for maximum holding in the initial stake
+    require(_totalStakedAmount + actualAmount <= MAX_HOLDING, "Staking amount exceeds maximum holding limit");
 
     // Update total staked amount
     _totalStakedAmount += actualAmount;
 
-    // Calculate reward based on actualAmount
-    
-    uint256 reward = calculateStakingReward(actualAmount, plan);
-    uint256 totalPromisedRewards = _totalPromisedRewards + reward;
-    
-    require(_rewardBalance >= totalPromisedRewards, "Insufficient reward balance for all stakers");
-    _totalPromisedRewards = totalPromisedRewards;
+    if (plan == StakingPlan.Flexible) {
+        // Handle flexible plan staking logic
+        if (userStake.isActive) {
+            userStake.amount += actualAmount;
+        } else {
+            initializeUserStake(userStake, msg.sender, actualAmount, plan);
+        }
+    } else {
+        // Handle fixed plan staking logic
+        uint256 reward = calculateStakingReward(actualAmount, plan);
+        require(_rewardBalanceForFixedPlan >= reward, "Insufficient reward balance for fixed plans");
+        
+        // Deduct the calculated reward from the fixed plan reward balance
+        _rewardBalanceForFixedPlan -= reward;
+        _totalPromisedRewards += reward;
 
-    // Update stake details
-    userStake.owner = msg.sender;
-    userStake.amount = actualAmount; // Use actualAmount here
+        initializeUserStake(userStake, msg.sender, actualAmount, plan);
+        userStake.reward = reward; // Assign the calculated reward
+    }
+
+    userStake.index = _stakingDetails.length; // Correct index assignment
+    _stakingDetails.push(userStake); // Push to staking details array after index assignment
+
+    emit Stake(msg.sender, actualAmount, plan);
+}
+
+// Helper function to initialize user stake
+function initializeUserStake(UserStake storage userStake, address owner, uint256 amount, StakingPlan plan) private {
+    userStake.owner = owner;
+    userStake.amount = amount;
     userStake.startTime = block.timestamp;
     userStake.plan = plan;
-    userStake.reward = reward;
-    userStake.accruedReward = 0;
-    userStake.index = _stakingDetails.length;
     userStake.isActive = true;
-
-    _stakingDetails.push(userStake);
-
-    emit Stake(msg.sender, actualAmount, plan); // Emit actualAmount
+    // The index assignment is now handled in the stake function after pushing the stake
 }
 
 
@@ -622,37 +648,33 @@ function stake(uint256 amount, StakingPlan plan) external nonReentrant {
 }
 
     // Add a function to allow the owner to fund the reward balance
-    function fundRewards(uint256 amount) external onlyOwner nonReentrant{
-        IERC20(spunkyToken).transferFrom(msg.sender, address(this), amount);
-        _rewardBalance += amount;
-    }
-
- function claimReward(StakingPlan plan) internal returns (uint256) {
-    UserStake memory userStake = _userStakes[msg.sender][plan];
-    require(userStake.amount > 0, "No staking balance available");
-
-    uint256 reward = userStake.reward + userStake.accruedReward;
-
-    if (plan == StakingPlan.Flexible) {
-        uint256 addedReward = calculateAccruedReward(userStake.amount, plan);
-        reward += addedReward;
-
-        // Adjust reward if it exceeds the available _rewardBalance
-        if (_rewardBalance < reward){
-            reward = _rewardBalance;
+    function fundRewards(uint256 amount, bool isFlexiblePlan) external onlyOwner nonReentrant {
+        spunkyToken.safeTransferFrom(msg.sender, address(this), amount);
+        if (isFlexiblePlan) {
+            _rewardBalanceForFlexiblePlan += amount;
+        } else {
+            _rewardBalanceForFixedPlan += amount;
         }
     }
 
-    uint256 totalBalance = userStake.amount + reward;
-    if (totalBalance > MAX_HOLDING) {
-        reward = MAX_HOLDING - userStake.amount;
-    }
+ function claimReward(StakingPlan plan) internal returns (uint256) {
+  UserStake storage userStake = _userStakes[msg.sender][plan];
 
-    require(_rewardBalance >= reward, "Insufficient reward balance");
-    _rewardBalance -= reward;
+        // Calculate reward...
+        uint256 reward = userStake.reward + userStake.accruedReward;
 
-    return reward;
-  }
+        // Adjust the reward calculation and check against the correct reward balance
+        if (plan == StakingPlan.Flexible) {
+            require(_rewardBalanceForFlexiblePlan >= reward, "Insufficient reward balance in flexible plan");
+            _rewardBalanceForFlexiblePlan -= reward;
+        } else {
+            require(_rewardBalanceForFixedPlan >= reward, "Insufficient reward balance in fixed plan");
+            _rewardBalanceForFixedPlan -= reward;
+            _totalPromisedRewards -= userStake.reward; // Decrease promised rewards for fixed plans
+        }
+
+        return reward; 
+ }
 
 
   function userClaimReward(StakingPlan plan) external nonReentrant {
@@ -893,6 +915,10 @@ function emergencyWithdraw(StakingPlan plan) external nonReentrant {
     require(isBeforePlanEnds, "Emergency withdrawal is allowed only before the plan ends");
 
     uint256 totalAmount = userStake.amount;
+
+     if (plan != StakingPlan.Flexible) {
+            _totalPromisedRewards -= _userStakes[msg.sender][plan].reward;
+        }
 
     // Transfer the unstaked amount back to the user
     IERC20(spunkyToken).safeTransfer(msg.sender, totalAmount);
