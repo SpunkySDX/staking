@@ -582,7 +582,10 @@ function stake(uint256 amount, StakingPlan plan) external nonReentrant {
 
 function addToStake(uint256 additionalAmount, StakingPlan plan) external nonReentrant {
     require(additionalAmount > 0, "Invalid additional staking amount");
-    UserStake storage userStake = _userStakes[msg.sender][plan];
+
+
+    // UserStake storage userStake = _userStakes[msg.sender][plan];
+    UserStake storage userStake = _userStakes[msg.sender][StakingPlan.Flexible];
 
     // Ensure the user has an active stake to add to
     require(userStake.amount > 0, "No existing stake found.");
@@ -596,22 +599,38 @@ function addToStake(uint256 additionalAmount, StakingPlan plan) external nonReen
 
     uint256 newStakeAmount = userStake.amount + actualAdditionalAmount;
     uint256 newReward = calculateStakingReward(newStakeAmount, plan);
+    uint256 newAccruedReward = calculateAccruedReward(newStakeAmount, plan);
 
     // Check if the new reward exceeds the available _rewardBalance
     require(_rewardBalance >= newReward, "Insufficient reward balance for the new stake amount.");
 
-    // Update the user's stake and reward
+    // Update the user's stake and reward and also the accrued reward
     userStake.amount = newStakeAmount;
     userStake.reward = newReward; // Update the reward based on the new stake amount
+    userStake.accruedReward = newAccruedReward; //Update the accrued reward based on the new stake amount
 
     // Update the _stakingDetails array
     UserStake storage detail = _stakingDetails[userStake.index];
     detail.amount = newStakeAmount;
     detail.reward = newReward;
+    detail.accruedReward = newAccruedReward;
+    
+    userStake.accruedReward += newAccruedReward;
+    userStake.amount += actualAdditionalAmount;
+    userStake.startTime = block.timestamp;
 
     // Update the total staked amount and _rewardBalance
     _totalStakedAmount += actualAdditionalAmount;
     // Note: _rewardBalance should be adjusted based on the contract's logic for reward funding
+    userStake.reward = calculateStakingReward(userStake.amount, plan);
+
+    // Update staking details in the array
+    uint256 detailsIndex = userStake.index;
+    _stakingDetails[detailsIndex].accruedReward += newAccruedReward;
+    _stakingDetails[detailsIndex].amount += actualAdditionalAmount;
+    _stakingDetails[detailsIndex].startTime = block.timestamp;
+
+    require (newStakeAmount <= MAX_HOLDING, "You cannot hold above the maximum amount");
 
     emit UpdateStake(msg.sender, newStakeAmount, plan);
 }
