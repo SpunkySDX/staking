@@ -487,6 +487,11 @@ contract SpunkyStaking is Ownable, ReentrancyGuard {
         Flexible
     }
 
+    enum RewardCalculationType {
+        Initial,
+        Accrued
+    }
+
     // Define the returns for each plan
     mapping(StakingPlan => uint256) private _stakingPlanReturns;
 
@@ -580,7 +585,7 @@ function stake(uint256 amount, StakingPlan plan) external nonReentrant {
 }
 
 
-function addToStake(uint256 additionalAmount, StakingPlan plan) external nonReentrant {
+function addToStake(uint256 additionalAmount, StakingPlan plan, RewardCalculationType calculationType, uint256 startTime) external nonReentrant {
     require(additionalAmount > 0, "Invalid additional staking amount");
 
 
@@ -588,7 +593,7 @@ function addToStake(uint256 additionalAmount, StakingPlan plan) external nonReen
     UserStake storage userStake = _userStakes[msg.sender][StakingPlan.Flexible];
 
     // Ensure the user has an active stake to add to
-    require(userStake.amount > 0, "No existing stake found.");
+    require(userStake.amount > 0, "No existing stake fo`und.");
     require(userStake.isActive, "Stake is not active.");
 
     // Transfer the additional amount to the contract
@@ -598,32 +603,36 @@ function addToStake(uint256 additionalAmount, StakingPlan plan) external nonReen
     uint256 actualAdditionalAmount = balanceAfter - balanceBefore;
 
     uint256 newStakeAmount = userStake.amount + actualAdditionalAmount;
-    uint256 newReward = calculateStakingReward(newStakeAmount, plan);
-    uint256 newAccruedReward = calculateAccruedReward(newStakeAmount, plan);
 
-    // Check if the new reward exceeds the available _rewardBalance
-    require(_rewardBalance >= newReward, "Insufficient reward balance for the new stake amount.");
+    uint256 additionalReward = calculateReward(additionalAmount, plan, calculationType, startTime);
 
-    // Update the user's stake and reward and also the accrued reward
-    userStake.amount = newStakeAmount;
-    userStake.reward = newReward; // Update the reward based on the new stake amount
-    userStake.accruedReward = newAccruedReward; //Update the accrued reward based on the new stake amount
+    userStake.accruedReward += additionalReward;
+    // uint256 newReward = calculateStakingReward(newStakeAmount, plan);
+    // uint256 newAccruedReward = calculateAccruedReward(newStakeAmount, plan);
 
-    // Update the _stakingDetails array
-    UserStake storage detail = _stakingDetails[userStake.index];
-    detail.amount = newStakeAmount;
-    detail.reward = newReward;
-    detail.accruedReward = newAccruedReward;
+    // // Check if the new reward exceeds the available _rewardBalance
+    // require(_rewardBalance >= newReward, "Insufficient reward balance for the new stake amount.");
+
+    // // Update the user's stake and reward and also the accrued reward
+    // userStake.amount = newStakeAmount;
+    // userStake.reward = newReward; // Update the reward based on the new stake amount
+    // userStake.accruedReward = newAccruedReward; //Update the accrued reward based on the new stake amount
+
+    // // Update the _stakingDetails array
+    // UserStake storage detail = _stakingDetails[userStake.index];
+    // detail.amount = newStakeAmount;
+    // detail.reward = newReward;
+    // detail.accruedReward = newAccruedReward;
     
-    userStake.accruedReward += newAccruedReward;
-    userStake.amount += actualAdditionalAmount;
-    userStake.startTime = block.timestamp;
+    // userStake.accruedReward += newAccruedReward;
+    // userStake.amount += actualAdditionalAmount;
+    // userStake.startTime = block.timestamp;
 
-    // Update the total staked amount and _rewardBalance
-    _totalStakedAmount += actualAdditionalAmount;
-    // Note: _rewardBalance should be adjusted based on the contract's logic for reward funding
-    userStake.reward = calculateStakingReward(userStake.amount, plan);
-    
+    // // Update the total staked amount and _rewardBalance
+    // _totalStakedAmount += actualAdditionalAmount;
+    // // Note: _rewardBalance should be adjusted based on the contract's logic for reward funding
+    // userStake.reward = calculateStakingReward(userStake.amount, plan);
+
     require (newStakeAmount <= MAX_HOLDING, "You cannot hold above the maximum amount");
 
     emit UpdateStake(msg.sender, newStakeAmount, plan);
@@ -891,6 +900,41 @@ function claimReward(StakingPlan plan) internal returns (uint256) {
         return (amount * rewardPercentage * elapseTime) / (1000 * secondsInAYear);
     }
 }
+
+    function calculateReward (
+        uint256 amount,
+        StakingPlan plan,
+        RewardCalculationType calculationType,
+        uint256 startTime //Used primarily for reward calculation
+    ) internal view returns (uint256) {
+        uint256 rewardPercentage = _stakingPlanReturns[plan];
+        uint256 durationInSeconds = _stakingPlanDurations[plan] * 1 days;
+        uint256 secondsInAYear = 365 * 1 days;
+        
+        if (calculationType == RewardCalculationType.Initial) {
+            // For initial reward calculation
+            if (plan == StakingPlan.Flexible) {
+                return 0; // Flexible plan might have different handling
+            } else {
+                require(amount > 0, "Invalid staking amount");
+                return (amount * rewardPercentage * durationInSeconds) / (1000.0 * secondsInAYear);
+            }
+        } else {
+            // For accrued reward calculation
+            require(amount > 0, "Invalid staking amount");
+            uint256 elapseTime = block.timestamp - startTime;
+            if (elapseTime > durationInSeconds && plan != StakingPlan.Flexible) {
+                elapseTime = durationInSeconds;
+            }
+            if (plan == StakingPlan.Flexible) {
+                // Adjusting the reward calculation for the Flexible plan
+                return (amount * elapseTime) / (1000.0 * secondsInAYear);
+            } else {
+                return (amount * rewardPercentage * elapseTime) / (1000.0 * secondsInAYear);
+            }
+        }
+
+    }
 
 function emergencyWithdraw(StakingPlan plan) external nonReentrant {
     require(msg.sender != owner(), "Owner cannot stake");
