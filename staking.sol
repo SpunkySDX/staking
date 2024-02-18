@@ -623,13 +623,7 @@ function addToStake(uint256 additionalAmount, StakingPlan plan) external nonReen
     _totalStakedAmount += actualAdditionalAmount;
     // Note: _rewardBalance should be adjusted based on the contract's logic for reward funding
     userStake.reward = calculateStakingReward(userStake.amount, plan);
-
-    // Update staking details in the array
-    uint256 detailsIndex = userStake.index;
-    _stakingDetails[detailsIndex].accruedReward += newAccruedReward;
-    _stakingDetails[detailsIndex].amount += actualAdditionalAmount;
-    _stakingDetails[detailsIndex].startTime = block.timestamp;
-
+    
     require (newStakeAmount <= MAX_HOLDING, "You cannot hold above the maximum amount");
 
     emit UpdateStake(msg.sender, newStakeAmount, plan);
