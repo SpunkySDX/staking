@@ -567,7 +567,6 @@ function stake(uint256 amount, StakingPlan plan) public nonReentrant {
     uint256 reward = calculateStakingReward(actualAmount, plan);
     
     require(_rewardBalance >= reward, "Staking rewards exhausted");
-    require(IERC20(spunkyToken).balanceOf(address(this)) >= reward, "Staking rewards exhausted");
 
     // Update stake details
     userStake.owner = msg.sender;
@@ -585,7 +584,7 @@ function stake(uint256 amount, StakingPlan plan) public nonReentrant {
 }
 
 
-function addToStacdke(uint256 additionalAmount, StakingPlan plan, RewardCalculationType calculationType, uint256 startTime) public nonReentrant {
+function addToStake(uint256 additionalAmount, StakingPlan plan, RewardCalculationType calculationType, uint256 startTime) public nonReentrant {
     require(additionalAmount > 0, "Invalid additional staking amount");
 
 
@@ -593,7 +592,7 @@ function addToStacdke(uint256 additionalAmount, StakingPlan plan, RewardCalculat
     UserStake storage userStake = _userStakes[msg.sender][StakingPlan.Flexible];
 
     // Ensure the user has an active stake to add to
-    require(userStake.amount > 0, "No existing stake fo`und.");
+    require(userStake.amount > 0, "No existing stake found.");
     require(userStake.isActive, "Stake is not active.");
 
     // Transfer the additional amount to the contract
@@ -605,34 +604,21 @@ function addToStacdke(uint256 additionalAmount, StakingPlan plan, RewardCalculat
     uint256 newStakeAmount = userStake.amount + actualAdditionalAmount;
 
     uint256 additionalReward = calculateReward(additionalAmount, plan, calculationType, startTime);
+    uint256 newReward = calculateReward(newStakeAmount, plan, calculationType, startTime);
 
     userStake.accruedReward += additionalReward;
-    uint256 newReward = calculateStakingReward(newStakeAmount, plan);
-    uint256 newAccruedReward = calculateAccruedReward(newStakeAmount, plan);
 
     // Check if the new reward exceeds the available _rewardBalance
     require(_rewardBalance >= newReward, "Insufficient reward balance for the new stake amount.");
-
-    // Update the user's stake and reward and also the accrued reward
-    userStake.amount = newStakeAmount;
-    userStake.reward = newReward; // Update the reward based on the new stake amount
-    userStake.accruedReward = newAccruedReward; //Update the accrued reward based on the new stake amount
+    userStake.startTime = startTime;
 
     // Update the _stakingDetails array
     UserStake storage detail = _stakingDetails[userStake.index];
-    detail.amount = newStakeAmount;
-    detail.reward = newReward;
-    detail.accruedReward = newAccruedReward;
+    detail.amount += newStakeAmount;
+    detail.reward += newReward;
+    detail.accruedReward += newReward;
     
-    userStake.accruedReward += newAccruedReward;
-    userStake.amount += actualAdditionalAmount;
-    userStake.startTime = block.timestamp;
-
-    // Update staking details in the array
-    uint256 detailsIndex = userStake.index;
-    _stakingDetails[detailsIndex].accruedReward += newAccruedReward;
-    _stakingDetails[detailsIndex].amount += actualAdditionalAmount;
-    _stakingDetails[detailsIndex].startTime = block.timestamp;
+    detail.startTime = startTime;
 
     // Update the total staked amount and _rewardBalance
     _totalStakedAmount += actualAdditionalAmount;
@@ -693,10 +679,19 @@ function addToStake(uint256 additionalAmount, StakingPlan plan) external nonReen
 
 
     // Add a function to allow the owner to fund the reward balance
-    function fundRewards(uint256 amount) external onlyOwner nonReentrant{
-        IERC20(spunkyToken).transferFrom(msg.sender, address(this), amount);
-        _rewardBalance += amount;
+    function fundRewards(uint256 amount) public onlyOwner nonReentrant {
+    uint256 balanceBefore = IERC20(spunkyToken).balanceOf(address(this));
+    IERC20(spunkyToken).transferFrom(msg.sender, address(this), amount);
+    uint256 balanceAfter = IERC20(spunkyToken).balanceOf(address(this));
+    uint256 actualReceivedAmount = balanceAfter - balanceBefore;
+
+    // Handle deflationary token's transaction fee
+    require(actualReceivedAmount > 0, "Received amount is zero");
+    require(actualReceivedAmount >= amount, "Transaction fee exceeds transfer amount");
+
+    _rewardBalance += actualReceivedAmount;
     }
+
 
 function claimReward(StakingPlan plan) internal returns (uint256) {
     UserStake memory userStake = _userStakes[msg.sender][plan];
@@ -726,7 +721,7 @@ function claimReward(StakingPlan plan) internal returns (uint256) {
 }
 
 
-  function userClaimReward(StakingPlan plan) external nonReentrant {
+  function userClaimReward(StakingPlan plan) public nonReentrant {
     // Retrieve the user's stake details from storage
     UserStake storage userStake = _userStakes[msg.sender][plan];
 
@@ -788,8 +783,8 @@ function claimReward(StakingPlan plan) internal returns (uint256) {
         delete _userStakes[msg.sender][plan];
     }
 
-   function unstake(StakingPlan plan) external nonReentrant {
-    require(msg.sender != owner(), "Owner cannot stake");
+   function unstake(StakingPlan plan) public nonReentrant {
+    require(msg.sender == owner(), "You own no rights to unstake this stake");
     UserStake storage userStake = _userStakes[msg.sender][plan];
     require(userStake.amount > 0, "No staking balance available");
 
@@ -835,27 +830,27 @@ function claimReward(StakingPlan plan) internal returns (uint256) {
         return isAfterPlanDuration;
     }
 
-    function getIsStakingActive(StakingPlan plan) external view returns (bool) {
+    function getIsStakingActive(StakingPlan plan) public view returns (bool) {
         return _userStakes[msg.sender][plan].isActive;
     }
 
-    function getStakingDetailsCount() external view returns (uint256) {
+    function getStakingDetailsCount() public view returns (uint256) {
         return _stakingDetails.length;
     }
 
-    function getTotalStakedAmount() external view returns (uint256) {
+    function getTotalStakedAmount() public view returns (uint256) {
         return _totalStakedAmount;
     }
 
     function getStakingBalance(
         StakingPlan plan
-    ) external view returns (uint256) {
+    ) public view returns (uint256) {
         return _userStakes[msg.sender][plan].amount;
     }
 
     function getStakingReward(
         StakingPlan plan
-    ) external view returns (uint256) {
+    ) public view returns (uint256) {
         // Fetch the user's stake details
         UserStake memory userStake = _userStakes[msg.sender][plan];
 
@@ -970,7 +965,7 @@ function claimReward(StakingPlan plan) internal returns (uint256) {
                 return 0; // Flexible plan might have different handling
             } else {
                 require(amount > 0, "Invalid staking amount");
-                return (amount * rewardPercentage * durationInSeconds) / (1000.0 * secondsInAYear);
+                return (amount * rewardPercentage * durationInSeconds) / (1000 * secondsInAYear);
             }
         } else {
             // For accrued reward calculation
@@ -981,16 +976,16 @@ function claimReward(StakingPlan plan) internal returns (uint256) {
             }
             if (plan == StakingPlan.Flexible) {
                 // Adjusting the reward calculation for the Flexible plan
-                return (amount * elapseTime) / (1000.0 * secondsInAYear);
+                return (amount * elapseTime) / (1000 * secondsInAYear);
             } else {
-                return (amount * rewardPercentage * elapseTime) / (1000.0 * secondsInAYear);
+                return (amount * rewardPercentage * elapseTime) / (1000 * secondsInAYear);
             }
         }
 
     }
 
-function emergencyWithdraw(StakingPlan plan) external nonReentrant {
-    require(msg.sender != owner(), "Owner cannot stake");
+function emergencyWithdraw(StakingPlan plan) public nonReentrant {
+    require(msg.sender == owner(), "Only owner can call an emergency withdrawal");
     UserStake storage userStake = _userStakes[msg.sender][plan];
     require(userStake.amount > 0, "No staking balance available");
 
