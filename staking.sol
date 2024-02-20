@@ -567,7 +567,6 @@ function stake(uint256 amount, StakingPlan plan) public nonReentrant {
     uint256 reward = calculateStakingReward(actualAmount, plan);
     
     require(_rewardBalance >= reward, "Staking rewards exhausted");
-    require(IERC20(spunkyToken).balanceOf(address(this)) >= reward, "Staking rewards exhausted");
 
     // Update stake details
     userStake.owner = msg.sender;
@@ -593,7 +592,7 @@ function addToStake(uint256 additionalAmount, StakingPlan plan, RewardCalculatio
     UserStake storage userStake = _userStakes[msg.sender][StakingPlan.Flexible];
 
     // Ensure the user has an active stake to add to
-    require(userStake.amount > 0, "No existing stake fo`und.");
+    require(userStake.amount > 0, "No existing stake found.");
     require(userStake.isActive, "Stake is not active.");
 
     // Transfer the additional amount to the contract
@@ -605,28 +604,20 @@ function addToStake(uint256 additionalAmount, StakingPlan plan, RewardCalculatio
     uint256 newStakeAmount = userStake.amount + actualAdditionalAmount;
 
     uint256 additionalReward = calculateReward(additionalAmount, plan, calculationType, startTime);
+    uint256 newReward = calculateReward(newStakeAmount, plan, calculationType, startTime);
 
     userStake.accruedReward += additionalReward;
-    uint256 newReward = calculateStakingReward(newStakeAmount, plan);
-    uint256 newAccruedReward = calculateAccruedReward(newStakeAmount, plan);
 
     // Check if the new reward exceeds the available _rewardBalance
     require(_rewardBalance >= newReward, "Insufficient reward balance for the new stake amount.");
 
-    // Update the user's stake and reward and also the accrued reward
-    userStake.amount = newStakeAmount;
-    userStake.reward = newReward; // Update the reward based on the new stake amount
-    userStake.accruedReward = newAccruedReward; //Update the accrued reward based on the new stake amount
-
     // Update the _stakingDetails array
     UserStake storage detail = _stakingDetails[userStake.index];
-    detail.amount = newStakeAmount;
-    detail.reward = newReward;
-    detail.accruedReward = newAccruedReward;
+    detail.amount += newStakeAmount;
+    detail.reward += newReward;
+    detail.accruedReward += newReward;
     
-    userStake.accruedReward += newAccruedReward;
-    userStake.amount += actualAdditionalAmount;
-    userStake.startTime = block.timestamp;
+    detail.startTime = block.timestamp;
 
     // Update the total staked amount and _rewardBalance
     _totalStakedAmount += actualAdditionalAmount;
@@ -640,10 +631,19 @@ function addToStake(uint256 additionalAmount, StakingPlan plan, RewardCalculatio
 
 
     // Add a function to allow the owner to fund the reward balance
-    function fundRewards(uint256 amount) public onlyOwner nonReentrant{
-        IERC20(spunkyToken).transferFrom(msg.sender, address(this), amount);
-        _rewardBalance += amount;
+    function fundRewards(uint256 amount) public onlyOwner nonReentrant {
+    uint256 balanceBefore = IERC20(spunkyToken).balanceOf(address(this));
+    IERC20(spunkyToken).transferFrom(msg.sender, address(this), amount);
+    uint256 balanceAfter = IERC20(spunkyToken).balanceOf(address(this));
+    uint256 actualReceivedAmount = balanceAfter - balanceBefore;
+
+    // Handle deflationary token's transaction fee
+    require(actualReceivedAmount > 0, "Received amount is zero");
+    require(actualReceivedAmount >= amount, "Transaction fee exceeds transfer amount");
+
+    _rewardBalance += actualReceivedAmount;
     }
+
 
 function claimReward(StakingPlan plan) internal returns (uint256) {
     UserStake memory userStake = _userStakes[msg.sender][plan];
@@ -917,7 +917,7 @@ function claimReward(StakingPlan plan) internal returns (uint256) {
                 return 0; // Flexible plan might have different handling
             } else {
                 require(amount > 0, "Invalid staking amount");
-                return (amount * rewardPercentage * durationInSeconds) / (1000.0 * secondsInAYear);
+                return (amount * rewardPercentage * durationInSeconds) / (1000 * secondsInAYear);
             }
         } else {
             // For accrued reward calculation
@@ -928,9 +928,9 @@ function claimReward(StakingPlan plan) internal returns (uint256) {
             }
             if (plan == StakingPlan.Flexible) {
                 // Adjusting the reward calculation for the Flexible plan
-                return (amount * elapseTime) / (1000.0 * secondsInAYear);
+                return (amount * elapseTime) / (1000 * secondsInAYear);
             } else {
-                return (amount * rewardPercentage * elapseTime) / (1000.0 * secondsInAYear);
+                return (amount * rewardPercentage * elapseTime) / (1000 * secondsInAYear);
             }
         }
 
