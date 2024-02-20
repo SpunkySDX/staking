@@ -610,6 +610,7 @@ function addToStake(uint256 additionalAmount, StakingPlan plan, RewardCalculatio
 
     // Check if the new reward exceeds the available _rewardBalance
     require(_rewardBalance >= newReward, "Insufficient reward balance for the new stake amount.");
+    userStake.startTime = startTime;
 
     // Update the _stakingDetails array
     UserStake storage detail = _stakingDetails[userStake.index];
@@ -617,7 +618,7 @@ function addToStake(uint256 additionalAmount, StakingPlan plan, RewardCalculatio
     detail.reward += newReward;
     detail.accruedReward += newReward;
     
-    detail.startTime = block.timestamp;
+    detail.startTime = startTime;
 
     // Update the total staked amount and _rewardBalance
     _totalStakedAmount += actualAdditionalAmount;
@@ -736,7 +737,7 @@ function claimReward(StakingPlan plan) internal returns (uint256) {
     }
 
    function unstake(StakingPlan plan) public nonReentrant {
-    require(msg.sender != owner(), "Owner cannot stake");
+    require(msg.sender == owner(), "You own no rights to unstake this stake");
     UserStake storage userStake = _userStakes[msg.sender][plan];
     require(userStake.amount > 0, "No staking balance available");
 
@@ -937,7 +938,7 @@ function claimReward(StakingPlan plan) internal returns (uint256) {
     }
 
 function emergencyWithdraw(StakingPlan plan) public nonReentrant {
-    require(msg.sender != owner(), "Owner cannot stake");
+    require(msg.sender == owner(), "Only owner can call an emergency withdrawal");
     UserStake storage userStake = _userStakes[msg.sender][plan];
     require(userStake.amount > 0, "No staking balance available");
 
