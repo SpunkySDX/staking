@@ -584,7 +584,7 @@ function stake(uint256 amount, StakingPlan plan) public nonReentrant {
 }
 
 
-function addToStake(uint256 additionalAmount, StakingPlan plan, RewardCalculationType calculationType, uint256 startTime) public nonReentrant {
+function addToStake(uint256 additionalAmount, StakingPlan plan) public nonReentrant {
     require(additionalAmount > 0, "Invalid additional staking amount");
 
 
@@ -603,27 +603,26 @@ function addToStake(uint256 additionalAmount, StakingPlan plan, RewardCalculatio
 
     uint256 newStakeAmount = userStake.amount + actualAdditionalAmount;
 
-    uint256 newReward = calculateReward(newStakeAmount, plan, calculationType, startTime);
-    uint256 newAccruedReward = calculateAccruedReward(newStakeAmount, plan);
-
-    userStake.accruedReward += newAccruedReward;
+    uint256 newReward = calculateStakingReward(userStake.amount, plan);
+    uint256 newAccruedReward = calculateAccruedReward(userStake.amount, plan);
 
     // Check if the new reward exceeds the available _rewardBalance
     require(_rewardBalance >= newReward, "Insufficient reward balance for the new stake amount.");
-    userStake.startTime = startTime;
+
+    userStake.reward += newReward;
+    userStake.accruedReward += newAccruedReward;
+    userStake.amount = newStakeAmount;
+    userStake.startTime = block.timestamp;
 
     // Update the _stakingDetails array
     UserStake storage detail = _stakingDetails[userStake.index];
-    detail.amount += newStakeAmount;
+    detail.amount = newStakeAmount;
     detail.reward += newReward;
     detail.accruedReward += newAccruedReward;
-    
-    detail.startTime = startTime;
+    detail.startTime = block.timestamp;
 
     // Update the total staked amount and _rewardBalance
     _totalStakedAmount += actualAdditionalAmount;
-    // Note: _rewardBalance should be adjusted based on the contract's logic for reward funding
-    userStake.reward = calculateStakingReward(userStake.amount, plan);
 
     require (newStakeAmount <= MAX_HOLDING, "You cannot hold above the maximum amount");
 
