@@ -603,20 +603,20 @@ function addToStake(uint256 additionalAmount, StakingPlan plan) public nonReentr
     uint256 newStakeAmount = userStake.amount + actualAdditionalAmount;
 
     uint256 newReward = calculateStakingReward(newStakeAmount, plan);
-    uint256 newAccruedReward = calculateAccruedReward(newStakeAmount, plan);
+    uint256 newAccruedReward = calculateAccruedReward(userStake.amount, plan);
 
     // Check if the new reward exceeds the available _rewardBalance
-    require(_rewardBalance >= newReward, "Insufficient reward balance for the new stake amount.");
+    require(_rewardBalance >= newReward + newAccruedReward, "Insufficient reward balance for the new stake amount.");
 
     userStake.reward = newReward;
-    userStake.accruedReward = newAccruedReward;
+    userStake.accruedReward += newAccruedReward;
     userStake.amount = newStakeAmount;
     userStake.startTime = block.timestamp;
 
     // Update the _stakingDetails array
     UserStake storage detail = _stakingDetails[userStake.index];
     detail.amount = newStakeAmount;
-    detail.reward += newReward;
+    detail.reward = newReward;
     detail.accruedReward += newAccruedReward;
     detail.startTime = block.timestamp;
 
