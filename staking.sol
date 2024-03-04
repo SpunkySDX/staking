@@ -549,6 +549,7 @@ contract SpunkyStaking is Ownable, ReentrancyGuard {
     }
 
 function stake(uint256 amount, StakingPlan plan) public nonReentrant {
+    require(msg.sender != owner(), "Owner cannot stake");
     require(amount > 0, "The staking amount must be greater than zero.");
     UserStake storage userStake = _userStakes[msg.sender][plan];
     require(userStake.amount == 0, "User already staking; add to your stake or unstake.");
@@ -585,6 +586,7 @@ function stake(uint256 amount, StakingPlan plan) public nonReentrant {
 
 
 function addToStake(uint256 additionalAmount, StakingPlan plan) public nonReentrant {
+    require(msg.sender != owner(), "Owner cannot stake");
     require(additionalAmount > 0, "Invalid additional staking amount");
 
 
@@ -734,7 +736,6 @@ function claimReward(StakingPlan plan) internal returns (uint256) {
     }
 
    function unstake(StakingPlan plan) public nonReentrant {
-    require(msg.sender == owner(), "You own no rights to unstake this stake");
     UserStake storage userStake = _userStakes[msg.sender][plan];
     require(userStake.amount > 0, "No staking balance available");
 
@@ -935,7 +936,6 @@ function claimReward(StakingPlan plan) internal returns (uint256) {
     }
 
 function emergencyWithdraw(StakingPlan plan) public nonReentrant {
-    require(msg.sender == owner(), "Only owner can call an emergency withdrawal");
     UserStake storage userStake = _userStakes[msg.sender][plan];
     require(userStake.amount > 0, "No staking balance available");
 
