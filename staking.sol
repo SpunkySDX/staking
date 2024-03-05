@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-
-
 library Address {
     /**
      * @dev The ETH balance of the account is not enough to perform the operation.
@@ -950,12 +948,14 @@ function emergencyWithdraw(StakingPlan plan) public nonReentrant {
 
     // Update the total staked amount
     _totalStakedAmount -= userStake.amount;
-    
+
+
+    // Remove the user's stake details
+    removeStakeFromArray(plan);
+
     // Emit an EmergencyWithdraw event
     emit EmergencyWithdraw(msg.sender, totalAmount, plan);
 
-    // Remove the user's stake details
-    delete _userStakes[msg.sender][plan];
 }
 
 
