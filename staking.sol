@@ -626,17 +626,15 @@ function addToStake(uint256 additionalAmount, StakingPlan plan) public nonReentr
     require (newStakeAmount <= MAX_HOLDING, "You cannot hold above the maximum amount");
 
     emit UpdateStake(msg.sender, newStakeAmount, plan);
-}
+    }
 
-
-    // Add a function to allow the owner to fund the reward balance
     function fundRewards(uint256 amount) public onlyOwner nonReentrant {
     uint256 balanceBefore = IERC20(spunkyToken).balanceOf(address(this));
+    IERC20(spunkyToken).approve(address(this), amount);
     IERC20(spunkyToken).transferFrom(msg.sender, address(this), amount);
     uint256 balanceAfter = IERC20(spunkyToken).balanceOf(address(this));
     uint256 actualReceivedAmount = balanceAfter - balanceBefore;
 
-    // Handle deflationary token's transaction fee
     require(actualReceivedAmount > 0, "Received amount is zero");
 
     _rewardBalance += actualReceivedAmount;
@@ -948,16 +946,14 @@ function emergencyWithdraw(StakingPlan plan) public nonReentrant {
 
     // Update the total staked amount
     _totalStakedAmount -= userStake.amount;
-
-
+    
+    
     // Remove the user's stake details
     removeStakeFromArray(plan);
 
     // Emit an EmergencyWithdraw event
     emit EmergencyWithdraw(msg.sender, totalAmount, plan);
-
 }
 
 
-    
 }
