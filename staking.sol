@@ -630,7 +630,6 @@ function addToStake(uint256 additionalAmount, StakingPlan plan) public nonReentr
 
     function fundRewards(uint256 amount) public onlyOwner nonReentrant {
     uint256 balanceBefore = IERC20(spunkyToken).balanceOf(address(this));
-    IERC20(spunkyToken).approve(address(this), amount);
     IERC20(spunkyToken).transferFrom(msg.sender, address(this), amount);
     uint256 balanceAfter = IERC20(spunkyToken).balanceOf(address(this));
     uint256 actualReceivedAmount = balanceAfter - balanceBefore;
